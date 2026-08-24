@@ -844,16 +844,16 @@ async function buildUnifiedModelsResponseCore(
           else if (endpoints.includes("rerank")) modelType = "rerank";
           else if (endpoints.includes("images")) modelType = "image";
           else if (endpoints.includes("audio")) modelType = "audio";
-          const syncedFields = {
-            ...(modelType ? { type: modelType } : {}),
-            ...(apiFormat !== "chat-completions" ? { api_format: apiFormat } : {}),
-            ...(modelType === "audio" ? { subtype: "transcription" } : {}),
           // #FIX: operator-set Context Window Override must win over the synced
           // inputTokenLimit, just like it wins over registry/spec values. Without
           // this, /v1/models reported the synced default (e.g. 200000) instead of
           // the overridden real context (e.g. 1000000) for synced models.
           const syncedContextLength = getModelContextOverride(canonicalProviderId, sm.id) ?? sm.inputTokenLimit;
-          ...(syncedContextLength ? { context_length: syncedContextLength } : {}),
+          const syncedFields = {
+            ...(modelType ? { type: modelType } : {}),
+            ...(apiFormat !== "chat-completions" ? { api_format: apiFormat } : {}),
+            ...(modelType === "audio" ? { subtype: "transcription" } : {}),
+            ...(syncedContextLength ? { context_length: syncedContextLength } : {}),
             ...(typeof sm.outputTokenLimit === "number"
               ? { max_output_tokens: sm.outputTokenLimit }
               : {}),
@@ -896,12 +896,8 @@ async function buildUnifiedModelsResponseCore(
               parent: null,
               type: "audio",
               subtype: "speech",
-            // #FIX: operator-set Context Window Override must win over the synced
-          // inputTokenLimit, just like it wins over registry/spec values. Without
-          // this, /v1/models reported the synced default (e.g. 200000) instead of
-          // the overridden real context (e.g. 1000000) for synced models.
-          const syncedContextLength = getModelContextOverride(canonicalProviderId, sm.id) ?? sm.inputTokenLimit;
-          ...(syncedContextLength ? { context_length: syncedContextLength } : {}),
+              // reuse syncedContextLength declared above (override wins over synced default)
+              ...(syncedContextLength ? { context_length: syncedContextLength } : {}),
               ...(typeof sm.outputTokenLimit === "number"
                 ? { max_output_tokens: sm.outputTokenLimit }
                 : {}),
