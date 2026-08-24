@@ -1,5 +1,5 @@
 import { getDbInstance } from "./core";
-import { resolveProviderAlias } from "@omniroute/open-sse/services/model";
+import { resolveProviderAlias, getProviderAliases } from "@omniroute/open-sse/services/model";
 
 /**
  * Feature 5004 — self-correcting context-window overrides.
@@ -73,23 +73,33 @@ export function getModelContextOverrideRecord(
       return undefined;
     }
   };
-  // #FIX: provider alias normalization. The dashboard persists overrides under the
-  // no-auth provider id (e.g. "opencode"), but getTokenLimit() resolves the same
-  // provider through resolveProviderAlias() to its canonical slug (e.g.
-  // "opencode-zen") before querying. Without normalizing both sides, the lookup
-  // misses and the override silently falls through to the registry default
-  // (200000), so a Context Window Override has no effect on direct requests.
-  // Try the raw provider first, then its resolved canonical alias.
-  const alias = resolveProviderAlias(provider);
-  const candidates = alias && alias !== key.provider ? [key.provider, alias] : [key.provider];
-  for (const cand of candidates) {
+  // #FIX: provider alias normalization (both directions).
+  // The dashboard persists overrides under the no-auth provider id (e.g.
+  // "opencode"), but getTokenLimit()/getModelContextLimit() resolve the provider
+  // through resolveProviderAlias() to its canonical slug (e.g. "opencode-zen")
+  // before querying. Conversely a caller may already pass the canonical slug.
+  // Without normalizing both sides the lookup misses and the override silently
+  // falls through to the registry default (200000), so a Context Window Override
+  // has no effect on direct requests. Try every canonical/alias form.
+  // #FIX: provider alias normalization (both directions).
+  // The dashboard persists overrides under the no-auth provider id (e.g.
+  // "opencode"), but getTokenLimit()/getModelContextLimit() resolve the provider
+  // through resolveProviderAlias() to its canonical slug (e.g. "opencode-zen")
+  // before querying. A caller may also already pass the canonical slug. Without
+  // normalizing both sides the lookup misses and the override silently falls
+  // through to the registry default (200000), so a Context Window Override has
+  // no effect on direct requests. Try every canonical/alias form.
+  const norm = new Set<string>([key.provider]);
+  const fwd = resolveProviderAlias(provider); // opencode -> opencode-zen
+  if (fwd) norm.add(fwd);
+  // reverse: every alias that resolves to this provider (opencode-zen -> opencode)
+  for (const a of getProviderAliases(key.provider)) norm.add(a);
+  if (fwd) for (const a of getProviderAliases(fwd)) norm.add(a);
+  for (const cand of norm) {
     const row = query(cand, key.modelId);
     if (row) return toOverride(row);
   }
   return null;
-    // Table may not exist yet (pre-migration) — fall through to the catalog.
-    return null;
-  }
 }
 
 /** The overridden context window (tokens) for (provider, modelId), or null. Never throws. */

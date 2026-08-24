@@ -154,6 +154,22 @@ export function resolveProviderAlias(aliasOrId: string | null | undefined): stri
 }
 
 /**
+ * #FIX: reverse alias lookup. Return every alias that resolves to the given
+ * canonical provider id via ALIAS_TO_PROVIDER_ID (e.g. "opencode-zen" -> ["opencode"]).
+ * Used by the context-window override lookup so an override persisted under one
+ * provider form (the dashboard's no-auth id "opencode") still matches when the
+ * request path resolves the provider to its canonical slug ("opencode-zen").
+ */
+export function getProviderAliases(canonical: string | null | undefined): string[] {
+  if (typeof canonical !== "string" || !canonical) return [];
+  const out: string[] = [];
+  for (const [alias, target] of Object.entries(ALIAS_TO_PROVIDER_ID)) {
+    if (target === canonical && alias !== canonical) out.push(alias);
+  }
+  return out;
+}
+
+/**
  * #474 — Resolve a bare model name to the selected connection's `defaultModel`.
  *
  * When the client requested a bare model name (no "/", e.g. an alias that
