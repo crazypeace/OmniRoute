@@ -848,7 +848,12 @@ async function buildUnifiedModelsResponseCore(
             ...(modelType ? { type: modelType } : {}),
             ...(apiFormat !== "chat-completions" ? { api_format: apiFormat } : {}),
             ...(modelType === "audio" ? { subtype: "transcription" } : {}),
-            ...(sm.inputTokenLimit ? { context_length: sm.inputTokenLimit } : {}),
+          // #FIX: operator-set Context Window Override must win over the synced
+          // inputTokenLimit, just like it wins over registry/spec values. Without
+          // this, /v1/models reported the synced default (e.g. 200000) instead of
+          // the overridden real context (e.g. 1000000) for synced models.
+          const syncedContextLength = getModelContextOverride(canonicalProviderId, sm.id) ?? sm.inputTokenLimit;
+          ...(syncedContextLength ? { context_length: syncedContextLength } : {}),
             ...(typeof sm.outputTokenLimit === "number"
               ? { max_output_tokens: sm.outputTokenLimit }
               : {}),
@@ -891,7 +896,12 @@ async function buildUnifiedModelsResponseCore(
               parent: null,
               type: "audio",
               subtype: "speech",
-              ...(sm.inputTokenLimit ? { context_length: sm.inputTokenLimit } : {}),
+            // #FIX: operator-set Context Window Override must win over the synced
+          // inputTokenLimit, just like it wins over registry/spec values. Without
+          // this, /v1/models reported the synced default (e.g. 200000) instead of
+          // the overridden real context (e.g. 1000000) for synced models.
+          const syncedContextLength = getModelContextOverride(canonicalProviderId, sm.id) ?? sm.inputTokenLimit;
+          ...(syncedContextLength ? { context_length: syncedContextLength } : {}),
               ...(typeof sm.outputTokenLimit === "number"
                 ? { max_output_tokens: sm.outputTokenLimit }
                 : {}),
