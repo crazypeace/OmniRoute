@@ -55,6 +55,7 @@ import {
   normalizeBlockedProviderSet,
 } from "@/shared/utils/noAuthProviders";
 import { getTokenLimit } from "@omniroute/open-sse/services/contextManager";
+import { getModelContextOverride } from "@/lib/db/modelContextOverrides";
 import { extractApiKey } from "@/sse/services/auth";
 import type { ComboModelStep } from "@/lib/combos/steps";
 import {
@@ -392,7 +393,14 @@ async function buildUnifiedModelsResponseCore(
       const specContext = isPositiveFiniteNumber(spec?.contextWindow)
         ? spec.contextWindow
         : undefined;
+      // #FIX: an operator-set Context Window Override must win over the
+      // auto-synced / registry / spec values. Previously getModelContextOverride
+      // (inside getTokenLimit) sat LAST in the ??-chain, so a synced limit_context
+      // (e.g. 200000) shadowed a manual override (e.g. 1000000) and /v1/models
+      // reported the synced default instead of the overridden real context.
+      const overrideContext = getModelContextOverride(providerId, modelId) ?? undefined;
       const contextLength =
+        overrideContext ??
         syncedContext ??
         registryContext ??
         specContext ??
