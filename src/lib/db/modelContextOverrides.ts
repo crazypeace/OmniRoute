@@ -1,4 +1,5 @@
 import { getDbInstance } from "./core";
+import { resolveProviderAlias } from "@omniroute/open-sse/services/model";
 
 /**
  * Feature 5004 — self-correcting context-window overrides.
@@ -60,15 +61,32 @@ export function getModelContextOverrideRecord(
 ): ModelContextOverride | null {
   const key = normalizeKey(provider, modelId);
   if (!key) return null;
-  try {
-    const row = getDbInstance()
-      .prepare(
-        "SELECT provider, model_id, real_context, source, refreshed_at " +
-          "FROM model_context_overrides WHERE provider = ? AND model_id = ?"
-      )
-      .get(key.provider, key.modelId) as OverrideRow | undefined;
-    return row ? toOverride(row) : null;
-  } catch {
+  const query = (p: string, m: string): OverrideRow | undefined => {
+    try {
+      return getDbInstance()
+        .prepare(
+          "SELECT provider, model_id, real_context, source, refreshed_at " +
+            "FROM model_context_overrides WHERE provider = ? AND model_id = ?"
+        )
+        .get(p, m) as OverrideRow | undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  // #FIX: provider alias normalization. The dashboard persists overrides under the
+  // no-auth provider id (e.g. "opencode"), but getTokenLimit() resolves the same
+  // provider through resolveProviderAlias() to its canonical slug (e.g.
+  // "opencode-zen") before querying. Without normalizing both sides, the lookup
+  // misses and the override silently falls through to the registry default
+  // (200000), so a Context Window Override has no effect on direct requests.
+  // Try the raw provider first, then its resolved canonical alias.
+  const alias = resolveProviderAlias(provider);
+  const candidates = alias && alias !== key.provider ? [key.provider, alias] : [key.provider];
+  for (const cand of candidates) {
+    const row = query(cand, key.modelId);
+    if (row) return toOverride(row);
+  }
+  return null;
     // Table may not exist yet (pre-migration) — fall through to the catalog.
     return null;
   }
